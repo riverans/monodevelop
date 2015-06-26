@@ -30,6 +30,7 @@ using Gtk;
 using MonoDevelop.Components.AutoTest.Operations;
 using MonoDevelop.Components.AutoTest.Results;
 using System.Linq;
+using System.Xml;
 
 #if MAC
 using AppKit;
@@ -217,8 +218,8 @@ namespace MonoDevelop.Components.AutoTest
 				// Some subqueries can select different results
 				resultSet = subquery.Execute (resultSet);
 
-				if (resultSet.Count == 0) {
-					break;
+				if (resultSet == null || resultSet.Count == 0) {
+					return new AppResult[0];
 				}
 			}
 
@@ -273,6 +274,11 @@ namespace MonoDevelop.Components.AutoTest
 		public AppQuery TextView ()
 		{
 			return CheckType (typeof(TextView), "TextView");
+		}
+
+		public AppQuery Notebook ()
+		{
+			return CheckType (typeof(Notebook), "Notebook");
 		}
 
 		public AppQuery Text (string text)

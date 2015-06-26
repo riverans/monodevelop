@@ -24,33 +24,111 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+using System;
+using MonoDevelop.Ide.Commands;
 using NUnit.Framework;
 
 namespace UserInterfaceTests
 {
 	[TestFixture]
 	[Category ("Git")]
-	public class GitTests : CreateBuildTemplatesTestBase
+	public class GitTests : VCSBase
 	{
 		[Test]
-		public void TestGitSSHClone ()
+		[TestCase ("git@github.com:mono/jurassic.git", TestName = "TestGitSSHClone")]
+		[TestCase ("https://github.com/mono/jurassic.git", TestName = "TestGitHTTPSClone")]
+		public void TestGitClone (string url)
 		{
-			TestClone ("git@github.com:mono/monkeywrench.git");
+			TestClone (url);
+			Ide.WaitForSolutionCheckedOut ();
 		}
 
 		[Test]
-		public void TestGitHTTPSClone ()
+		public void TestCommit ()
 		{
-			TestClone ("https://github.com/mono/monkeywrench.git");
+			var templateOptions = new TemplateSelectionOptions {
+				CategoryRoot = OtherCategoryRoot,
+				Category = ".NET",
+				TemplateKindRoot = GeneralKindRoot,
+				TemplateKind = "Console Project"
+			};
+			CreateProject (templateOptions,
+				new ProjectDetails (templateOptions),
+				new GitOptions { UseGit = true, UseGitIgnore = true});
+			
+			Session.WaitForElement (IdeQuery.TextArea);
+			TestCommit ("First commit");
 		}
 
-		void TestClone (string url)
+		[Test]
+		public void TestNoChangesStashOperation ()
 		{
-			var checkoutFolder = VCSUtils.CheckoutOrClone (url, TakeScreenShot);
-			FoldersToClean.Add (checkoutFolder);
-			Assert.DoesNotThrow (() => Ide.WaitForSolutionLoaded (TakeScreenShot));
-			Assert.DoesNotThrow (() => Ide.WaitForPackageUpdate());
-			TakeScreenShot ("Packages-Updated");
+			var templateOptions = new TemplateSelectionOptions {
+				CategoryRoot = OtherCategoryRoot,
+				Category = ".NET",
+				TemplateKindRoot = GeneralKindRoot,
+				TemplateKind = "Console Project"
+			};
+			CreateProject (templateOptions,
+				new ProjectDetails (templateOptions),
+				new GitOptions { UseGit = true, UseGitIgnore = true});
+			
+			Session.WaitForElement (IdeQuery.TextArea);
+			TestCommit ("First commit");
+			Session.ExecuteCommand (FileCommands.CloseAllFiles);
+			Assert.Throws <TimeoutException> (() => TestGitStash ("No changes stash attempt"));
+			Ide.WaitForStatusMessage (new [] {"No changes were available to stash"}, 20);
+		}
+
+		[Test]
+		public void TestStashWithoutHeadCommit ()
+		{
+			var templateOptions = new TemplateSelectionOptions {
+				CategoryRoot = OtherCategoryRoot,
+				Category = ".NET",
+				TemplateKindRoot = GeneralKindRoot,
+				TemplateKind = "Console Project"
+			};
+			CreateProject (templateOptions,
+				new ProjectDetails (templateOptions),
+				new GitOptions { UseGit = true, UseGitIgnore = true});
+			
+			Session.WaitForElement (IdeQuery.TextArea);
+			Assert.Throws <TimeoutException> (() => TestGitStash ("Stash without head commit"));
+			TakeScreenShot ("Stash-Window-Doesnt-Show");
+		}
+
+		[Test]
+		public void TestStashAndUnstashSuccessful ()
+		{
+			var templateOptions = new TemplateSelectionOptions {
+				CategoryRoot = OtherCategoryRoot,
+				Category = ".NET",
+				TemplateKindRoot = GeneralKindRoot,
+				TemplateKind = "Console Project"
+			};
+			CreateProject (templateOptions, 
+				new ProjectDetails (templateOptions),
+				new GitOptions { UseGit = true, UseGitIgnore = true });
+			
+			Session.WaitForElement (IdeQuery.TextArea);
+			TestCommit ("First commit");
+
+			Session.ExecuteCommand (FileCommands.CloseFile);
+			Session.WaitForElement (IdeQuery.TextArea);
+
+			Session.ExecuteCommand (TextEditorCommands.InsertNewLine);
+			TakeScreenShot ("Inserted-Newline-Marked-Dirty");
+			Session.ExecuteCommand (FileCommands.SaveAll);
+			TakeScreenShot ("Inserted-Newline-SaveAll-Called");
+
+			TestGitStash ("Entered new blank line");
+
+			Session.WaitForElement (IdeQuery.TextArea);
+			TakeScreenShot ("After-Stash");
+
+			TestGitUnstash ();
+			TakeScreenShot ("Untash-Successful");
 		}
 	}
 }

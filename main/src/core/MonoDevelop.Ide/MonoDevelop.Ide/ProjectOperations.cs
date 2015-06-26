@@ -339,6 +339,7 @@ namespace MonoDevelop.Ide
 				}
 			} finally {
 				dlg.Destroy ();
+				dlg.Dispose ();
 			}
 		}
 		
@@ -527,6 +528,7 @@ namespace MonoDevelop.Ide
 				return false;
 			} finally {
 				dlg.Destroy ();
+				dlg.Dispose ();
 			}
 		}
 		
@@ -572,6 +574,7 @@ namespace MonoDevelop.Ide
 					}
 				} finally {
 					optionsDialog.Destroy ();
+					optionsDialog.Dispose ();
 				}
 			} else if (entry is Solution) {
 				Solution solution = (Solution) entry;
@@ -587,6 +590,7 @@ namespace MonoDevelop.Ide
 					}
 				} finally {
 					optionsDialog.Destroy ();
+					optionsDialog.Dispose ();
 				}
 			}
 			else {
@@ -606,6 +610,7 @@ namespace MonoDevelop.Ide
 					}
 				} finally {
 					optionsDialog.Destroy ();
+					optionsDialog.Dispose ();
 				}
 			}
 		}
@@ -633,6 +638,7 @@ namespace MonoDevelop.Ide
 			var newProjectDialog = new NewProjectDialogController ();
 			newProjectDialog.BasePath = parentWorkspace.BaseDirectory;
 			newProjectDialog.SelectedTemplateId = defaultItemId;
+			newProjectDialog.ParentWorkspace = parentWorkspace;
 
 			if (newProjectDialog.Show () && newProjectDialog.NewItem != null) {
 				parentWorkspace.Items.Add ((WorkspaceItem)newProjectDialog.NewItem);
@@ -657,6 +663,12 @@ namespace MonoDevelop.Ide
 			
 			if (dlg.Run ()) {
 				try {
+
+					if (WorkspaceContainsWorkspaceItem (parentWorkspace, dlg.SelectedFile)) {
+						MessageService.ShowMessage (GettextCatalog.GetString ("The workspace already contains '{0}'.", Path.GetFileNameWithoutExtension (dlg.SelectedFile)));
+						return res;
+					}
+
 					res = AddWorkspaceItem (parentWorkspace, dlg.SelectedFile);
 				} catch (Exception ex) {
 					MessageService.ShowError (GettextCatalog.GetString ("The file '{0}' could not be loaded.", dlg.SelectedFile), ex);
@@ -665,7 +677,12 @@ namespace MonoDevelop.Ide
 
 			return res;
 		}
-		
+
+		static bool WorkspaceContainsWorkspaceItem (Workspace workspace, FilePath workspaceItemFileName)
+		{
+			return workspace.Items.Any (existingWorkspaceItem => existingWorkspaceItem.FileName == workspaceItemFileName);
+		}
+
 		public WorkspaceItem AddWorkspaceItem (Workspace parentWorkspace, string itemFileName)
 		{
 			using (IProgressMonitor monitor = IdeApp.Workbench.ProgressMonitors.GetProjectLoadProgressMonitor (true)) {
@@ -713,6 +730,11 @@ namespace MonoDevelop.Ide
 					return res;
 				}
 
+				if (SolutionContainsProject (parentFolder, dlg.SelectedFile)) {
+					MessageService.ShowMessage (GettextCatalog.GetString ("The project '{0}' has already been added.", Path.GetFileNameWithoutExtension (dlg.SelectedFile)));
+					return res;
+				}
+
 				try {
 					res = AddSolutionItem (parentFolder, dlg.SelectedFile);
 				} catch (Exception ex) {
@@ -725,7 +747,13 @@ namespace MonoDevelop.Ide
 
 			return res;
 		}
-		
+
+		static bool SolutionContainsProject (SolutionFolder folder, FilePath projectFileName)
+		{
+			Solution solution = folder.ParentSolution;
+			return solution.GetAllProjects ().Any (existingProject => existingProject.FileName == projectFileName);
+		}
+
 		public SolutionItem AddSolutionItem (SolutionFolder folder, string entryFileName)
 		{
 			AddEntryEventArgs args = new AddEntryEventArgs (folder, entryFileName);
@@ -745,10 +773,11 @@ namespace MonoDevelop.Ide
 		
 		public bool CreateProjectFile (Project parentProject, string basePath, string selectedTemplateId)
 		{
-			NewFileDialog nfd = new NewFileDialog (parentProject, basePath);
-			if (selectedTemplateId != null)
-				nfd.SelectTemplate (selectedTemplateId);
-			return MessageService.ShowCustomDialog (nfd) == (int) Gtk.ResponseType.Ok;
+			using (NewFileDialog nfd = new NewFileDialog (parentProject, basePath)) {
+				if (selectedTemplateId != null)
+					nfd.SelectTemplate (selectedTemplateId);
+				return MessageService.ShowCustomDialog (nfd) == (int)Gtk.ResponseType.Ok;
+			}
 		}
 
 		public bool AddReferenceToProject (DotNetProject project)
@@ -833,6 +862,7 @@ namespace MonoDevelop.Ide
 					}
 				} finally {
 					dlg.Destroy ();
+					dlg.Dispose ();
 				}
 			}
 			else if (result == AlertButton.Remove && IdeApp.Workspace.RequestItemUnload (prj)) {
@@ -1809,8 +1839,10 @@ namespace MonoDevelop.Ide
 							newFileList.Add (null);
 						}
 					} finally {
-						if (addExternalDialog != null)
+						if (addExternalDialog != null) {
 							addExternalDialog.Destroy ();
+							addExternalDialog.Dispose ();
+						}
 					}
 				}
 			}
